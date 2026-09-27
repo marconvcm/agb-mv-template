@@ -4,7 +4,7 @@ BIN   := gba/target/thumbv4t-none-eabi/release/game-gba
 TITLE := GAME
 SHOTS := $(shell pwd)/docs
 
-.PHONY: all test run build release shots gen-art check fmt clippy clean
+.PHONY: all test run build release shots gen-art fonts check fmt clippy clean
 
 all: release
 
@@ -34,9 +34,13 @@ shots:
 	screenshot-generator --rom /tmp/$(TITLE)-capture.gba --frames 60 --output $(SHOTS)/shot-boot.png
 	@ls -l $(SHOTS)/shot-*.png
 
-# Regenerate the committed art. Needs Pillow and a pixel font.
-gen-art:
+# Regenerate the committed art. Needs Pillow and the fonts in assets-src/.
+gen-art: fonts
 	python3 tools/gbagfx.py
+
+# Every font in assets-src/fonts.toml -> gba/gfx/fonts/ and gba/src/gfx/fonts.rs.
+fonts:
+	python3 tools/gbafont.py build
 
 check: test
 	cargo clippy -p game-core -- -D warnings

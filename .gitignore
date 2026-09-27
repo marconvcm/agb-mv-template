@@ -1,3 +1,4 @@
 target/
 *.gba
 *.sav
+__pycache__/

@@ -11,7 +11,8 @@
 
 use agb::display::tiled::RegularBackground;
 
-use super::assets::{backgrounds, charset_index};
+use super::assets::backgrounds;
+use super::fonts::text as font;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Charset {
@@ -32,8 +33,8 @@ impl Charset {
             }};
         }
         match self {
-            Charset::Dark => place!(backgrounds::CHARSET_DARK),
-            Charset::Dim => place!(backgrounds::CHARSET_DIM),
+            Charset::Dark => place!(backgrounds::TEXT_DARK),
+            Charset::Dim => place!(backgrounds::TEXT_DIM),
         }
     }
 }
@@ -45,13 +46,13 @@ pub fn write(bg: &mut RegularBackground, tx: u16, ty: u16, text: &[u8], set: Cha
         if x >= 32 {
             break;
         }
-        set.set_tile(bg, x, ty, charset_index(ch));
+        set.set_tile(bg, x, ty, font::index(ch));
     }
 }
 
 /// Blank `len` cells, for clearing a row before rewriting it.
 pub fn clear(bg: &mut RegularBackground, tx: u16, ty: u16, len: u16, set: Charset) {
     for i in 0..len {
-        set.set_tile(bg, tx + i, ty, charset_index(b' '));
+        set.set_tile(bg, tx + i, ty, font::index(b' '));
     }
 }

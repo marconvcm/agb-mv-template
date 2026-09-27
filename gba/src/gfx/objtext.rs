@@ -11,7 +11,8 @@
 use agb::display::GraphicsFrame;
 use agb::display::object::Object;
 
-use super::assets::{ADVANCE, FONT_DIM, charset_index, sprites};
+use super::assets::sprites;
+use super::fonts::ui;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Ink {
@@ -22,15 +23,15 @@ pub enum Ink {
 impl Ink {
     fn offset(self) -> usize {
         match self {
-            Ink::Normal => 0,
-            Ink::Dim => FONT_DIM,
+            Ink::Normal => ui::NORMAL,
+            Ink::Dim => ui::DIM,
         }
     }
 }
 
 /// Pixel width `text` will occupy.
 pub fn width(text: &[u8]) -> i32 {
-    text.len() as i32 * ADVANCE
+    ui::width(text)
 }
 
 pub fn write(frame: &mut GraphicsFrame, x: i32, y: i32, text: &[u8], ink: Ink) {
@@ -38,8 +39,8 @@ pub fn write(frame: &mut GraphicsFrame, x: i32, y: i32, text: &[u8], ink: Ink) {
         if ch == b' ' {
             continue; // a space costs an object otherwise
         }
-        Object::new(sprites::FONT.sprite(charset_index(ch) + ink.offset()))
-            .set_pos((x + i as i32 * ADVANCE, y))
+        Object::new(sprites::UI.sprite(ui::index(ch) + ink.offset()))
+            .set_pos((x + i as i32 * ui::ADVANCE, y))
             .show(frame);
     }
 }

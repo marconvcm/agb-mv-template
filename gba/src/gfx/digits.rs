@@ -7,7 +7,8 @@
 use agb::display::GraphicsFrame;
 use agb::display::object::Object;
 
-use super::assets::{ADVANCE, DIGITS_ALT, digit_frame, sprites};
+use super::assets::sprites;
+use super::fonts::digits as font;
 
 /// A fixed-width, zero-padded, right-aligned number at a fixed position.
 #[derive(Clone, Copy)]
@@ -42,10 +43,10 @@ impl NumberField {
             digits[i] = b'0' + (v % 10) as u8;
             v /= 10;
         }
-        let offset = if self.alt { DIGITS_ALT } else { 0 };
+        let offset = if self.alt { font::ALT } else { font::NORMAL };
         for (i, &ch) in digits[..self.width.min(digits.len())].iter().enumerate() {
-            Object::new(sprites::DIGITS.sprite(digit_frame(ch) + offset))
-                .set_pos((self.x + i as i32 * ADVANCE, self.y))
+            Object::new(sprites::DIGITS.sprite(font::index(ch) + offset))
+                .set_pos((self.x + i as i32 * font::ADVANCE, self.y))
                 .show(frame);
         }
     }

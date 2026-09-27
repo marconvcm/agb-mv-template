@@ -382,6 +382,7 @@ run           # cargo run, via a runner script that finds mGBA
 release       # padded, header-fixed .gba
 shots         # headless screenshots of every screen into docs/
 gen-art       # regenerate committed art
+fonts         # every font in the manifest, plus its generated Rust tables
 ```
 
 Resolve the emulator in a script rather than hardcoding `mgba-qt` in

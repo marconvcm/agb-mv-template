@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Generate GBA-legal art, and refuse to emit art that is not.
 
-    python3 tools/gbagfx.py [--font PATH] [--size N]
+    python3 tools/gbagfx.py
+
+Fonts are not made here: they are listed in assets-src/fonts.toml and built
+by tools/gbafont.py, which reuses the helpers and checks below.
 
 Output goes to gba/gfx/ and is committed, so the build never depends on
 Pillow, on a font, or on this script. Regeneration is deliberate.
@@ -21,17 +24,12 @@ import argparse
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 
 REPO = Path(__file__).resolve().parent.parent
 OUT = REPO / "gba" / "gfx"
 
 SCREEN = (240, 160)
-
-# Glyphs available to both text systems. Keep them in sync with the Rust
-# side's CHARSET; index in this string is the tile/frame index.
-CHARSET = " 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ:$+-./!?"
-DIGITS = "0123456789+- "
 
 
 def q(c):
@@ -43,87 +41,9 @@ def rgb(r, g, b):
     return (q(r), q(g), q(b), 255)
 
 
-TRANSPARENT = (0, 0, 0, 0)
-BLACK = rgb(0, 0, 0)
-WHITE = rgb(255, 255, 255)
-DIM = rgb(112, 126, 133)
-PANEL = rgb(155, 173, 183)
+# The panel colour. Tile fonts drawn onto it (`bg` in assets-src/fonts.toml)
+# must use the same value.
 NIGHT = rgb(24, 28, 40)
-GOLD = rgb(255, 205, 60)
-
-
-def load_font(path, size):
-    """Load a pixel font and refuse it if it antialiases at this size.
-
-    A font rendered off its design size produces grey edge pixels, which a
-    15-bit indexed palette cannot afford. Checking here saves discovering it
-    on a 3x-scaled emulator window.
-    """
-    font = ImageFont.truetype(str(path), size)
-    probe = Image.new("L", (200, 32), 0)
-    ImageDraw.Draw(probe).text((0, 0), CHARSET.strip(), font=font, fill=255)
-    aa = sum(1 for p in probe.getdata() if 0 < p < 255)
-    if aa:
-        sys.exit(
-            f"{Path(path).name} at {size}px antialiases ({aa} grey pixels).\n"
-            "Use the font's design size, or pick a font drawn on a pixel grid."
-        )
-    advance = font.getlength("MM") / 2
-    print(f"font {Path(path).name} @{size}px: advance {advance:g}px, no antialiasing")
-    return font, int(advance)
-
-
-def glyph(ch, font, fg, bg):
-    """One 8x8 cell holding `ch`, left-aligned."""
-    im = Image.new("RGBA", (8, 8), bg)
-    if ch != " ":
-        mask = Image.new("L", (8, 8), 0)
-        ImageDraw.Draw(mask).text((0, -2), ch, font=font, fill=255)
-        ink = Image.new("RGBA", (8, 8), fg)
-        im.paste(ink, (0, 0), mask.point(lambda v: 255 if v > 127 else 0))
-    return im
-
-
-def gen_charsets(font):
-    """Background text tiles, one variant per surface colour.
-
-    BG palette index 0 is the global backdrop, not per-tile transparency, so
-    a text tile carries the colour of whatever it sits on. Add a variant here
-    for every panel colour the game writes text onto.
-    """
-    for name, fg, bg in [
-        ("charset_dark", WHITE, NIGHT),
-        ("charset_dim", DIM, NIGHT),
-        ("charset_panel", BLACK, PANEL),
-    ]:
-        sheet = Image.new("RGBA", (8 * len(CHARSET), 8), bg)
-        for i, ch in enumerate(CHARSET):
-            sheet.paste(glyph(ch, font, fg, bg), (i * 8, 0))
-        save(sheet, f"{name}.png")
-
-
-def gen_font(font):
-    """An object version of the charset, in two inks.
-
-    Objects sit at the font's natural advance instead of the 8px tile grid,
-    so menus set tight. Two inks so unavailable entries can be dimmed.
-    """
-    n = len(CHARSET)
-    sheet = Image.new("RGBA", (8 * n * 2, 8), TRANSPARENT)
-    for i, ch in enumerate(CHARSET):
-        sheet.paste(glyph(ch, font, WHITE, TRANSPARENT), (i * 8, 0))
-        sheet.paste(glyph(ch, font, DIM, TRANSPARENT), ((n + i) * 8, 0))
-    save(sheet, "font.png")
-
-
-def gen_digits(font):
-    """Digits as objects, in two colours, for values that change every frame."""
-    n = len(DIGITS)
-    sheet = Image.new("RGBA", (8 * n * 2, 8), TRANSPARENT)
-    for i, ch in enumerate(DIGITS):
-        sheet.paste(glyph(ch, font, WHITE, TRANSPARENT), (i * 8, 0))
-        sheet.paste(glyph(ch, font, GOLD, TRANSPARENT), ((n + i) * 8, 0))
-    save(sheet, "digits.png")
 
 
 def gen_panel():
@@ -162,13 +82,19 @@ def flatten(im, background, colours=14):
 # --- checks -------------------------------------------------------------
 
 
+def pixels(im):
+    """RGBA pixels as tuples (Image.getdata is deprecated)."""
+    b = im.convert("RGBA").tobytes()
+    return tuple(zip(b[0::4], b[1::4], b[2::4], b[3::4]))
+
+
 def check_background(name):
     """One palette for the image, and tiles that fit a charblock."""
     im = Image.open(OUT / name).convert("RGBA")
     colours, tiles, worst = set(), set(), 0
     for ty in range(im.size[1] // 8):
         for tx in range(im.size[0] // 8):
-            data = tuple(im.crop((tx * 8, ty * 8, tx * 8 + 8, ty * 8 + 8)).getdata())
+            data = pixels(im.crop((tx * 8, ty * 8, tx * 8 + 8, ty * 8 + 8)))
             tiles.add(data)
             worst = max(worst, len(set(data)))
             colours |= set(data)
@@ -205,7 +131,7 @@ def check_sprites(name, w, h=None):
     worst = 0
     for i in range(im.size[0] // w):
         frame = im.crop((i * w, 0, i * w + w, h))
-        worst = max(worst, len({p for p in frame.getdata() if p[3] > 0}))
+        worst = max(worst, len({p for p in pixels(frame) if p[3] > 0}))
     if worst > 15:
         problems.append(f"a frame uses {worst} colours (max 15 + transparent)")
     print(f"  {name:20} {w}x{h} worst-frame={worst:2} {'; '.join(problems) or 'ok'}")
@@ -213,45 +139,18 @@ def check_sprites(name, w, h=None):
 
 
 def save(im, name):
-    OUT.mkdir(parents=True, exist_ok=True)
+    (OUT / name).parent.mkdir(parents=True, exist_ok=True)
     im.save(OUT / name)
-    print(f"  {name:20} {im.size[0]:4}x{im.size[1]:<4}")
+    print(f"  {name:24} {im.size[0]:4}x{im.size[1]:<4}")
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument(
-        "--font",
-        default="assets-src/font.ttf",
-        help="pixel font, rendered at its design size (default: %(default)s)",
-    )
-    ap.add_argument("--size", type=int, default=8, help="font size in px")
-    args = ap.parse_args()
-
-    path = Path(args.font)
-    if not path.is_absolute():
-        path = REPO / path
-    if not path.exists():
-        sys.exit(
-            f"font not found: {path}\n"
-            "Drop a pixel font there or pass --font. Kenney Mini Square Mono at\n"
-            "8px is known to render with no antialiasing; see AGENTS.md section 5."
-        )
-
-    font, _ = load_font(path, args.size)
+    argparse.ArgumentParser(description=__doc__).parse_args()
     print("generating")
-    gen_charsets(font)
-    gen_font(font)
-    gen_digits(font)
     gen_panel()
 
     print("checking GBA limits")
-    ok = True
-    for bg in ("panel.png", "charset_dark.png", "charset_dim.png", "charset_panel.png"):
-        ok &= check_background(bg)
-    ok &= check_sprites("font.png", 8, 8)
-    ok &= check_sprites("digits.png", 8, 8)
-    if not ok:
+    if not check_background("panel.png"):
         sys.exit("art violates a GBA limit; see above")
 
 

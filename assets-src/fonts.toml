@@ -1,0 +1,51 @@
+# Every font in the game, in one place. `make fonts` turns this into
+#
+#   gba/gfx/fonts/<name>.png            objects: one strip, variants end to end
+#   gba/gfx/fonts/<name>_<variant>.png  tiles: one sheet per surface
+#   gba/src/gfx/fonts.rs                a module per font: charset, advance,
+#                                       variant offsets, index()
+#
+# Wire each sheet into gba/src/gfx/assets.rs by hand (the generator warns if
+# you forget): tile sheets must share an `include_background_gfx!` call with
+# the art they sit on, so the palette is optimised together.
+#
+# Pick `size` with `python3 tools/gbafont.py probe <file>`: only sizes that
+# render with zero antialiased pixels are accepted.
+#
+# Keys:
+#   name      Rust module name and sheet basename (snake_case, unique)
+#   file      TTF/OTF, relative to the repo root
+#   size      px
+#   mode      "objects" (transparent, sits at the font's advance, costs one
+#             object per glyph) or "tiles" (8px grid, costs no objects)
+#   charset   glyphs in sheet order; printable ASCII. If it has no lowercase,
+#             index() upper-cases its input.
+#   variants  objects: { variant = "#ink" }
+#             tiles:   { variant = { ink = "#ink", bg = "#surface" } }
+#             Colours are snapped to 15-bit.
+#   cell      optional "WxH" override; default is the smallest that fits
+#   leading   optional extra px between lines for LINE_HEIGHT (default 2)
+
+[[font]]
+name = "ui"
+file = "assets-src/font.ttf"
+size = 8
+mode = "objects"
+charset = " 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ:$+-./!?"
+variants = { normal = "#ffffff", dim = "#707e85" }
+
+[[font]]
+name = "digits"
+file = "assets-src/font.ttf"
+size = 8
+mode = "objects"
+charset = "0123456789+- "
+variants = { normal = "#ffffff", alt = "#ffcd3c" }
+
+[[font]]
+name = "text"
+file = "assets-src/font.ttf"
+size = 8
+mode = "tiles"
+charset = " 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ:$+-./!?"
+variants = { dark = { ink = "#ffffff", bg = "#181c28" }, dim = { ink = "#707e85", bg = "#181c28" } }

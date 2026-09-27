@@ -35,6 +35,10 @@ make release    # padded, header-checked game.gba
   which between them avoid agb's runtime text layout entirely.
 - **An art generator that enforces GBA limits** and fails the run rather than
   emitting art the hardware will not take.
+- **Every font in one manifest** (`assets-src/fonts.toml`). `make fonts`
+  builds the sheets and a generated `fonts.rs` with a module per font, so
+  charsets and advances never drift from the art. `tools/gbafont.py probe`
+  finds the sizes a new TTF renders crisply at.
 - **Headless screenshots** (`make shots`) so you can see what the ROM draws
   without a desktop in the loop.
 - **`romcheck`**, run automatically by `make release`: header checksum, magic
