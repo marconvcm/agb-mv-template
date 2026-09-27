@@ -383,6 +383,7 @@ release       # padded, header-fixed .gba
 shots         # headless screenshots of every screen into docs/
 gen-art       # regenerate committed art
 fonts         # every font in the manifest, plus its generated Rust tables
+font-preview  # FONT=... SIZE=... -> target/font-preview.png, as the GBA draws it
 ```
 
 Resolve the emulator in a script rather than hardcoding `mgba-qt` in

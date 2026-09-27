@@ -13,10 +13,17 @@ variants; the format is documented at the top of that file.
 Adding a font:
 
 ```sh
-python3 tools/gbafont.py probe assets-src/myfont.ttf   # which sizes are crisp?
-$EDITOR assets-src/fonts.toml                          # add a [[font]] entry
-make fonts                                             # sheets + gba/src/gfx/fonts.rs
+make font-probe FONT=assets-src/myfont.ttf              # which sizes are crisp?
+make font-preview FONT=assets-src/myfont.ttf SIZE=16    # look: target/font-preview.png
+$EDITOR assets-src/fonts.toml                           # add a [[font]] entry
+make fonts                                              # sheets + gba/src/gfx/fonts.rs
 ```
+
+`FONT` can also be an installed family name (`FONT='Saira ExtraCondensed
+Thin'`). The preview shows sample text (`TEXT='LINE ONE|LINE TWO'`) scaled
+4x exactly as the GBA would draw it; for a font that antialiases it also
+shows the smooth original above, so you can see what snapping to pixels
+costs.
 
 then add the sheet to `gba/src/gfx/assets.rs` (`make fonts` lists any that
 are missing) and use it through `crate::gfx::fonts::<name>`.

@@ -2,12 +2,21 @@
 """Build every font in the game from one manifest, and refuse fonts that will not work.
 
     python3 tools/gbafont.py probe FONT [--sizes 5-24] [--charset STR]
+    python3 tools/gbafont.py preview FONT --size N [--text STR] [--scale 4]
     python3 tools/gbafont.py build [--manifest assets-src/fonts.toml] [--only NAME]
 
 `probe` answers the question that matters before anything else: at which
 sizes does this font rasterise with zero antialiased pixels? A pixel font
 is only crisp at its design size (or a multiple of it), and a 15-bit
 indexed palette cannot afford grey edge pixels.
+
+`preview` draws sample text the way the GBA would get it -- snapped to whole
+pixels and 15-bit colour -- scaled up so you can judge it, next to the
+font's own smooth rendering. It works on any font, including ones `build`
+refuses, so you can see what you would lose.
+
+FONT is a file path or an installed family name ('Saira ExtraCondensed
+Thin'), which is looked up with fc-match.
 
 `build` reads assets-src/fonts.toml (the format is documented there) and
 writes, for every font listed:
@@ -29,6 +38,7 @@ Pillow or on the fonts. See AGENTS.md sections 5 and 6.
 
 import argparse
 import re
+import subprocess
 import sys
 import tomllib
 from pathlib import Path
@@ -130,10 +140,29 @@ def sprite_cell(w, h):
 # --- probe --------------------------------------------------------------
 
 
+def find_font(name):
+    """A path, or failing that an installed family name via fc-match."""
+    path = Path(name).expanduser()
+    if path.exists():
+        return path
+    try:
+        out = subprocess.run(
+            ["fc-match", "-f", "%{file}\n%{family}:%{style}", name],
+            capture_output=True, text=True, check=True,
+        ).stdout.splitlines()
+    except (OSError, subprocess.CalledProcessError):
+        sys.exit(f"font not found: {name} (and fc-match is unavailable)")
+    # fc-match always answers with *something*; only trust it if every word
+    # asked for appears in what it matched.
+    matched = " ".join(out[1:]).lower().replace(" ", "")
+    if not out or not all(w in matched for w in name.lower().split()):
+        sys.exit(f"font not found: {name!r} (fc-match only offered {' '.join(out[1:]) or 'nothing'})")
+    print(f"{name} -> {out[0]}")
+    return Path(out[0])
+
+
 def cmd_probe(args):
-    path = Path(args.font)
-    if not path.exists():
-        sys.exit(f"font not found: {path}")
+    path = find_font(args.font)
     print(f"{path.name}  charset={len(args.charset)} glyphs\n")
     print(" size  grey  ink     advance       sprite  tiles")
     crisp = []
@@ -157,6 +186,60 @@ def cmd_probe(args):
             "no size in range renders without antialiasing; this is not a pixel\n"
             "font. Widen --sizes, or pick a font drawn on a pixel grid."
         )
+
+
+# --- preview ------------------------------------------------------------
+
+
+def cmd_preview(args):
+    path = find_font(args.font)
+    font = ImageFont.truetype(str(path), args.size)
+    ink, bg = parse_colour(args.ink), parse_colour(args.bg)
+    lines = args.text.split("|")
+    pad, gap = 4, 2
+
+    # Size the canvas from the real ink of every line.
+    boxes = [font.getbbox(line) for line in lines]
+    top = min(b[1] for b in boxes)
+    line_h = max(b[3] for b in boxes) - top
+    w = max(b[2] for b in boxes) + pad * 2
+    h = (line_h + gap) * len(lines) - gap + pad * 2
+
+    mask = Image.new("L", (w, h), 0)
+    draw = ImageDraw.Draw(mask)
+    for i, line in enumerate(lines):
+        draw.text((pad, pad - top + i * (line_h + gap)), line, font=font, fill=255)
+    grey = sum(1 for p in mask.tobytes() if 0 < p < 255)
+
+    def paint(m):
+        im = Image.new("RGBA", (w, h), bg)
+        im.paste(Image.new("RGBA", (w, h), ink), (0, 0), m)
+        return im.resize((w * args.scale, h * args.scale), Image.NEAREST)
+
+    gba = paint(mask.point(lambda v: 255 if v >= args.threshold else 0))
+    rows = [gba]
+    if grey:
+        rows.insert(0, paint(mask))  # the smooth original, for comparison
+    sep = args.scale * 2
+    sheet = Image.new("RGBA", (gba.width, sum(r.height for r in rows) + sep * (len(rows) - 1)), bg)
+    y = 0
+    for r in rows:
+        sheet.paste(r, (0, y))
+        y += r.height + sep
+
+    out = Path(args.out).expanduser()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    sheet.save(out)
+    wide = w - pad * 2
+    print(f"{path.name} @{args.size}px: text is {wide}x{line_h}px ({wide * 100 // 240}% of the 240px screen)")
+    if grey:
+        print(
+            f"antialiases ({grey} grey pixels): top is the font's own rendering, bottom\n"
+            f"is what the GBA gets at --threshold {args.threshold}. `build` will refuse this size."
+        )
+    else:
+        print("crisp: no antialiasing, what you see is what the GBA gets")
+    print(f"wrote {out}")
 
 
 # --- build --------------------------------------------------------------
@@ -408,7 +491,7 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     p = sub.add_parser("probe", help="find the sizes a font renders crisply at")
-    p.add_argument("font", help="TTF/OTF file")
+    p.add_argument("font", help="TTF/OTF file or installed family name")
     p.add_argument("--sizes", type=parse_range, default=range(5, 25), help="e.g. 6-16 (default 5-24)")
     p.add_argument(
         "--charset",
@@ -416,6 +499,17 @@ def main():
         help="glyphs to test",
     )
     p.set_defaults(func=cmd_probe)
+
+    v = sub.add_parser("preview", help="render sample text as the GBA would, scaled up")
+    v.add_argument("font", help="TTF/OTF file or installed family name")
+    v.add_argument("--size", type=int, required=True, help="px")
+    v.add_argument("--text", default="PRESS START|Score 0123456789", help="'|' separates lines")
+    v.add_argument("--scale", type=int, default=4, help="nearest-neighbour zoom (default 4)")
+    v.add_argument("--ink", default="#ffffff", help="#rrggbb (default white)")
+    v.add_argument("--bg", default="#181c28", help="#rrggbb (default the template's panel)")
+    v.add_argument("--threshold", type=int, default=128, help="0-255 cutoff for grey pixels")
+    v.add_argument("--out", default=str(REPO / "target" / "font-preview.png"), help="default: target/font-preview.png")
+    v.set_defaults(func=cmd_preview)
 
     b = sub.add_parser("build", help="generate every font in the manifest")
     b.add_argument("--manifest", default=str(MANIFEST), help="default: assets-src/fonts.toml")

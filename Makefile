@@ -4,7 +4,7 @@ BIN   := gba/target/thumbv4t-none-eabi/release/game-gba
 TITLE := GAME
 SHOTS := $(shell pwd)/docs
 
-.PHONY: all test run build release shots gen-art fonts check fmt clippy clean
+.PHONY: all test run build release shots gen-art fonts font-probe font-preview check fmt clippy clean
 
 all: release
 
@@ -41,6 +41,17 @@ gen-art: fonts
 # Every font in assets-src/fonts.toml -> gba/gfx/fonts/ and gba/src/gfx/fonts.rs.
 fonts:
 	python3 tools/gbafont.py build
+
+# Which sizes of a font render crisply?   make font-probe FONT='Saira ExtraCondensed Thin'
+font-probe:
+	python3 tools/gbafont.py probe "$(FONT)"
+
+# Sample text as the GBA would draw it, scaled up, into target/font-preview.png.
+#   make font-preview FONT=assets-src/font.ttf SIZE=8 TEXT='PRESS START|SCORE 100'
+SIZE ?= 8
+TEXT ?= PRESS START|Score 0123456789
+font-preview:
+	python3 tools/gbafont.py preview "$(FONT)" --size $(SIZE) --text "$(TEXT)"
 
 check: test
 	cargo clippy -p game-core -- -D warnings
