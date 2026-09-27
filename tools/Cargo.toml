@@ -1,0 +1,10 @@
+[package]
+name = "game-tools"
+version.workspace = true
+edition.workspace = true
+description = "Host-side codegen. Never part of the ROM."
+publish = false
+
+[[bin]]
+name = "romcheck"
+path = "src/romcheck.rs"

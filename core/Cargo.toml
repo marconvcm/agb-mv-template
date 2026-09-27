@@ -1,0 +1,8 @@
+[package]
+name = "game-core"
+version.workspace = true
+edition.workspace = true
+description = "Game logic. no_std, no allocator, no platform dependencies."
+
+[dependencies]
+serde = { version = "1", default-features = false, features = ["derive"] }

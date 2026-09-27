@@ -1,0 +1,30 @@
+[package]
+name = "game-gba"
+version = "0.1.0"
+edition = "2024"
+description = "The ROM."
+
+# Own workspace root: this crate builds for thumbv4t-none-eabi with
+# build-std, which the host workspace at ../ must not inherit.
+[workspace]
+
+[features]
+# Drives the game from a fixed script so the headless screenshot generator
+# can reach screens that normally need a button press. Never in a real build.
+capture = []
+
+[dependencies]
+agb = "0.25.0"
+game-core = { path = "../core" }
+
+[profile.dev]
+opt-level = 3      # an unoptimised GBA build is too slow to play
+debug = true
+
+[profile.dev.build-override]
+opt-level = 3
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+debug = true

@@ -1,0 +1,14 @@
+# Host workspace: game logic + codegen tools, both built for the host.
+# The ROM in ./gba is its own workspace root because it needs a different
+# default target and build-std. See AGENTS.md section 1.
+[workspace]
+resolver = "2"
+members = ["core", "tools"]
+exclude = ["gba"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+
+[profile.dev]
+opt-level = 1
